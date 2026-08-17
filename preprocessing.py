@@ -93,10 +93,11 @@ def load_and_preprocess_image(
 	)
 
 
-def build_word_dataframe(df, pics_path):
+def build_word_dataframe(df, pics_path, preprocessed_pics_path):
 	df_selected = df[["word_id", "word_text", "user_class", "word_bboxes"]].copy()
 	df_selected = df_selected.explode(["word_id", "word_text", "word_bboxes"], ignore_index=True)
-	df_selected["word_path"] = pics_path + "/" + df_selected["word_id"].astype(str) + ".png"
+	df_selected["original_word_path"] = pics_path + "/" + df_selected["word_id"].astype(str) + ".png"
+	df_selected["word_path"] = preprocessed_pics_path + "/" + df_selected["word_id"].astype(str) + ".png"
 
 
 	def to_flat_bbox(x):
@@ -127,11 +128,16 @@ def build_word_dataframe(df, pics_path):
 def filter_records_valid_height(df_selected, min_height=1):
 	return df_selected[df_selected["bbox_height"] >= min_height].copy().reset_index(drop=True)
 
+def filter_records_existing_files(df_selected):
+	"""Keep only rows where the file in path_column exists on disk."""
+	mask = df_selected["original_word_path"].apply(lambda p: isinstance(p, str) and os.path.exists(p))
+	return df_selected[mask].copy().reset_index(drop=True)
+
 def export_preprocessed_images(df_selected, output_dir="preprocessed_words", **preprocess_kwargs):
 	if os.path.isdir(output_dir):
 		shutil.rmtree(output_dir)
 	os.makedirs(output_dir, exist_ok=True)
-	preprocessed_images = df_selected["word_path"].apply(load_and_preprocess_image, **preprocess_kwargs)
+	preprocessed_images = df_selected["original_word_path"].apply(load_and_preprocess_image, **preprocess_kwargs)
 
 	
 	for idx, img in preprocessed_images.items():
@@ -142,7 +148,7 @@ def export_preprocessed_images(df_selected, output_dir="preprocessed_words", **p
 		if out.ndim == 3 and out.shape[2] == 1:
 			out = out.squeeze(2)
 
-		original_filename = os.path.basename(df_selected.at[idx, "word_path"])
+		original_filename = os.path.basename(df_selected.at[idx, "original_word_path"])
 		out_path = os.path.join(output_dir, original_filename)
 		cv2.imwrite(out_path, out)
 
@@ -153,15 +159,16 @@ def main():
 	print("Starting preprocessing...")
 
 	df = pd.read_parquet("df.parquet")
-	df_selected = build_word_dataframe(df, pics_path="dataset_words/words")
-
+	df_selected = build_word_dataframe(df, pics_path="dataset_words/words", preprocessed_pics_path="preprocessed_words")
+	df_selected = filter_records_existing_files(df_selected)
 	df_selected = filter_records_valid_height(df_selected, min_height=32)
 
-	preprocessed_images = export_preprocessed_images(df_selected, target_size=None)
+	preprocessed_images = export_preprocessed_images(df_selected, target_size=(0, 64))
 
 	df_selected.to_parquet("df_words_preprocessed.parquet", index=False)
 
 	print("Preprocessing completed. Preprocessed images saved in 'preprocessed_words' directory.")
+ 
 
 if __name__ == "__main__":
 	main()
