@@ -11,9 +11,6 @@ import cv2
 
 import common # mój moduł z powszechnymi funkcjami i stałymi
 
-from sklearn.model_selection import train_test_split
-
-
 # ==========================================
 # 1. ARCHITEKTURA CRNN (Z KONTROWANYM NAGŁÓWKIEM)
 # ==========================================
@@ -101,24 +98,6 @@ def collate_fn_pad(batch):
         
     return torch.stack(padded_images), torch.tensor(labels)
 
-def get_subsets(df, test_size=0.2, val_size=0.20, random_state=common.GLOBAL_SEED):
-    if test_size + val_size >= 1.0:
-        raise ValueError("test_size + val_size must be less than 1.0")
-    
-    relative_val_size = val_size / (1 - test_size)
-
-    # Zbiór treningowy + walidacyjny
-    df_train_val, df_test = train_test_split(
-        df, test_size=test_size, random_state=random_state, stratify=df['user_class']
-    )
-    
-    # Podziel zbiór treningowo-walidacyjny na treningowy (75%) i walidacyjny (25%)
-    df_train, df_val = train_test_split(
-        df_train_val, test_size=relative_val_size, random_state=random_state, stratify=df_train_val['user_class']
-    )
-    
-    return df_train, df_val, df_test
-
 class HandwritingDataset(Dataset):
     """
     Sztuczny dataset do celów demonstracyjnych.
@@ -142,6 +121,29 @@ class HandwritingDataset(Dataset):
 
         return image_tensor, torch.tensor(int(author_id), dtype=torch.long)
 
+class CachedHandwritingDataset(Dataset):
+    def __init__(self, df):
+        # Konwertujemy kolumny na natywne listy (błyskawiczny dostęp)
+        self.labels = df["user_class"].astype(int).tolist()
+        paths = df["word_path"].tolist()
+        
+        print("Wczytywanie całego zbioru do pamięci RAM...")
+        self.images = []
+        for p in paths:
+            img = cv2.imread(p, cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                raise FileNotFoundError(f"Błąd odczytu: {p}")
+            # Normalizujemy i zamieniamy na tensor od razu
+            tensor_img = torch.from_numpy(img.astype(np.float32) / 255.0).unsqueeze(0)
+            self.images.append(tensor_img)
+        print("Wczytano do pamięci RAM!")
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        # Dostęp natychmiastowy z pamięci RAM (O(1))
+        return self.images[idx], torch.tensor(self.labels[idx], dtype=torch.long)
 
 def test_main():
     EMBEDDING_DIM = 128   # Rozmiar docelowego wektora cech
@@ -153,19 +155,14 @@ def test_main():
     
     classes = sorted(df_words["user_class"].unique())
     class_to_idx = {cls: i for i, cls in enumerate(classes)}
-    
     df_words["user_class"] = df_words["user_class"].map(class_to_idx)
     
-    df_train, df_val, df_test = get_subsets(df_words, test_size=0.2, val_size=0.20)
+    df_train, df_val, df_test = common.get_subsets(df_words, test_size=0.2, val_size=0.20)
 
-    # Utwórz zmienną `dataset` bazującą na df_train.
-    # Pole 'image_path' wskaże pliki znajdujące się w folderze 'preprocessed_words'.
     dataset = HandwritingDataset(df_train)
-    # Spróbuj zbudować ścieżki obrazów z typowych nazw kolumn: 'image', 'filename', 'file'.
     
     generator = torch.Generator().manual_seed(common.GLOBAL_SEED)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, generator=generator, collate_fn=collate_fn_pad)
-    
     
     # Inicjalizacja modelu, funkcji straty i optymalizatora
     model = PretrainCRNNClassifier(num_classes=len(df_train["user_class"].unique()), embedding_dim=EMBEDDING_DIM)
@@ -206,11 +203,6 @@ def test_main():
 
     print("\n--- ZAKOŃCZONO PRE-TRAINING ---")
 
-    # ==========================================
-    # 4. ZAPIS WAG DLA SIECI SYJAMSKIEJ
-    # ==========================================
-    
-    # Wariant A: Zapisujemy tylko wyuczoną sekcję ENKODERA (CNN + BiLSTM)
     torch.save(model.encoder.state_dict(), "crnn_encoder_pretrained.pth")
     print("Zapisano wagi wyuczonego enkodera do pliku: 'crnn_encoder_pretrained.pth'")
 
