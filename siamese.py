@@ -18,22 +18,6 @@ import cv2
 import common
 from crnn import CRNNEncoder
 
-class InfiniteSiameseDataset(Dataset):
-    def __init__(self, df, samples_per_epoch=20000):
-        self.df = df
-        self.samples_per_epoch = samples_per_epoch
-        self.author_groups = df.groupby('user_class').indices
-        self.authors = list(self.author_groups.keys())
-
-    def __len__(self):
-        # Narzucamy DataLoaderowi, ile kroków ma liczyć jedna epoka
-        return self.samples_per_epoch
-
-    def __getitem__(self, idx):
-        # Logika dynamicznego losowania pary (zawsze świeże losowanie)
-        # ...
-        return img1, img2, label
-    
 class SiameseHandwritingDataset(Dataset):
     def __init__(self, df):
         self.df = df
@@ -211,19 +195,20 @@ def load_checkpoint(path, model, optimizer, scheduler):
 
     return checkpoint["epoch"], checkpoint.get("max_epochs"), checkpoint.get("metrics", [])
     
-def main(
+def train_siamese(
     resume_dir = None,
     max_epochs = 10,
     samples_per_epoch = 20000,
     batch_size = 8,
     learning_rate = 1e-3,
     margin = 1.0,
-    threshold = 0.5
+    threshold = 0.5,
+    pretrained_encoder = None
     ):
-    
     # =============================================
     # Load and preprocess the dataset
     # =============================================
+    #region
     
     df_words = pd.read_parquet("df_words_preprocessed.parquet")
     
@@ -241,18 +226,23 @@ def main(
         worker_init_fn=worker_init_fn,     # Rozwiązuje problem duplikacji
         collate_fn=collate_fn_siamese_pad,
     )
+    #endregion
     
     # =============================================
     # Initialize the Siamese Network and training components
     # =============================================
+    #region
     
-    pretrained_model = CRNNEncoder()
-          
-    pretrained_path = "crnn_encoder_pretrained_70percent.pth"
-    # Wczytanie wag z pre-trainingu
-    if pretrained_path:
-        pretrained_model.load_state_dict(torch.load(pretrained_path))
-        print(f"Wczytano wagi enkodera z {pretrained_path}")
+    if pretrained_encoder is not None:
+        pretrained_model = pretrained_encoder
+    else:
+        pretrained_model = CRNNEncoder()
+            
+        pretrained_path = "crnn_encoder_pretrained_70percent.pth"
+        # Wczytanie wag z pre-trainingu
+        if pretrained_path:
+            pretrained_model.load_state_dict(torch.load(pretrained_path))
+            print(f"Wczytano wagi enkodera z {pretrained_path}")
     
     model = SiameseNetwork(pretrained_model)
     
@@ -260,12 +250,16 @@ def main(
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_epochs)
     
+    #endregion
+    
     # =============================================
     # Prepare output directories and handle resuming from checkpoint
     # =============================================
+    #region
     
     if resume_dir is None:
-        folder_name = f"siamese_training_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # training_siamese_[model]_[pretrained_encoder]_[optimizer]_[date]
+        folder_name = f"training_siamese_{type(model).__name__}_{type(pretrained_model).__name__}_{type(optimizer).__name__}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         output_dir = Path(folder_name)
         output_dir.mkdir(parents=True, exist_ok=True)
     else:
@@ -321,9 +315,12 @@ def main(
             scheduler.T_max = max_epochs
         print(f"Wznowiono trening od epoki {start_epoch + 1}.")
         
+    #endregion
+
     # =============================================
     # Learning loop
     # =============================================
+    #region
     
     start_epoch = 0
     metrics_history = []
@@ -405,6 +402,8 @@ def main(
 
         print(f"Epoka [{epoch+1}/{max_epochs}] | Straty (Loss): {epoch_loss:.4f} | LR: {current_lr:.6f} | Dokładność (Acc): {epoch_acc:.2f}% | Czas: {epoch_time:.2f}s")
         
+    #endregion
+        
     # =============================================
     # Return final encoder weights and save them
     # =============================================
@@ -416,4 +415,4 @@ def main(
     return model.encoder
     
 if __name__ == "__main__":
-    main()
+    train_siamese()

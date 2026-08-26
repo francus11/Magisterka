@@ -16,10 +16,6 @@ import cv2
 import common # mój moduł z powszechnymi funkcjami i stałymi
 from pre_trained_models import ResNetEncoder
 
-# ==========================================
-# 1. ARCHITEKTURA CRNN (Z KONTROWANYM NAGŁÓWKIEM)
-# ==========================================
-
 class CRNNEncoder(nn.Module):
     """Główny trzon sieci wyciągający cechy (Backbone)."""
     def __init__(self, embedding_dim=128):
@@ -200,7 +196,7 @@ def load_checkpoint(path, model, optimizer, generator):
 
     return checkpoint["epoch"], checkpoint.get("max_epochs"), checkpoint.get("metrics", [])
 
-def test_main(
+def train_crnn(
     embedding_dim = 128,   # Rozmiar docelowego wektora cech
     batch_size = 8,
     max_epochs = 10,
@@ -210,6 +206,7 @@ def test_main(
     # =============================================
     # Load and preprocess the dataset
     # =============================================
+    #region
     
     df_words = pd.read_parquet("df_words_preprocessed.parquet")
     
@@ -224,21 +221,29 @@ def test_main(
     generator = torch.Generator().manual_seed(common.GLOBAL_SEED)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, generator=generator, collate_fn=collate_fn_pad)
     
+    #endregion
+    
     # =============================================
     # Initialize classifier and training components
     # =============================================
+    #region
     
     # Inicjalizacja modelu, funkcji straty i optymalizatora
     model = PretrainResnetClassifier(num_classes=len(df_train["user_class"].unique()), embedding_dim=embedding_dim)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    
+    #endregion
+    
         
     # =============================================
     # Prepare output directories and handle resuming from checkpoint
     # =============================================
+    #region
     
     if resume_dir is None:
-        output_dir = Path(f"crnn_training_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        # training_crnn_[model]_[encoder]_[optimizer]_[date]
+        output_dir = Path(f"training_crnn_{type(model).__name__}_{type(model.encoder).__name__}_{type(optimizer).__name__}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
         output_dir.mkdir(parents=True, exist_ok=True)
     else:
         output_dir = Path(resume_dir)
@@ -283,10 +288,13 @@ def test_main(
             max_epochs = checkpoint_max_epochs
         print(f"Wznowiono pre-training od epoki {start_epoch + 1}.")
         
+    #endregion
+        
     # =============================================
     # Learning loop
     # =============================================
-        
+    #region
+
     start_epoch = 0
     metrics_history = []
     
@@ -351,6 +359,8 @@ def test_main(
 
         print(f"Epoka [{epoch+1}/{max_epochs}] | Straty (Loss): {epoch_loss:.4f} | Dokładność (Acc): {epoch_acc:.2f}% | Czas: {epoch_time:.2f}s")
         
+    #endregion
+        
     # =============================================
     # Return final encoder weights and save them
     # =============================================
@@ -363,4 +373,4 @@ def test_main(
     return model.encoder
 
 if __name__ == "__main__":
-    test_main()
+    train_crnn()
