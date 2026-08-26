@@ -1,0 +1,9 @@
+.*/
+dataset_words
+dataset_forms
+IAM_lines
+preprocessed_*
+__pycache__
+*.zip
+*.tgz
+training_*
