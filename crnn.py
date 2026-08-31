@@ -196,7 +196,7 @@ def load_checkpoint(path, model, optimizer, generator):
 
     return checkpoint["epoch"], checkpoint.get("max_epochs"), checkpoint.get("metrics", [])
 
-def train_crnn(
+def train_pretrain(
     embedding_dim = 128,   # Rozmiar docelowego wektora cech
     batch_size = 8,
     max_epochs = 10,
@@ -412,4 +412,4 @@ def train_crnn(
     return model.encoder
 
 if __name__ == "__main__":
-    train_crnn()
+    train_pretrain()
