@@ -92,6 +92,26 @@ class PretrainResnetClassifier(nn.Module):
         embedding = self.encoder(x)
         logits = self.classifier(embedding)
         return logits, embedding
+    
+class PretrainResnetClassifier_WithDropout(nn.Module):
+    """Pełny model z nagłówkiem klasyfikacyjnym używany TYLKO do pre-trainingu."""
+    def __init__(self, num_classes, embedding_dim=128, dropout_p=0.5):
+        super(PretrainResnetClassifier_WithDropout, self).__init__()
+        self.encoder = ResNetEncoder(embedding_dim=embedding_dim)
+        # Klasyfikator rzutujący embedding na liczność autorów
+        self.classifier = nn.Sequential(
+            nn.Dropout(p=dropout_p),            # <-- DROPOUT 1
+            nn.Linear(512, embedding_dim),
+            nn.BatchNorm1d(embedding_dim),
+            nn.ReLU(),
+            nn.Dropout(p=dropout_p),            # <-- DROPOUT 2
+            nn.Linear(embedding_dim, num_classes)
+        )
+
+    def forward(self, x):
+        embedding = self.encoder(x)
+        logits = self.classifier(embedding)
+        return logits, embedding
 
 def collate_fn_pad(batch):
     """
@@ -236,6 +256,8 @@ def train_pretrain(
     # Inicjalizacja modelu, funkcji straty i optymalizatora
     if model is None:
         model = PretrainResnetClassifier(num_classes=len(df_train["user_class"].unique()), embedding_dim=embedding_dim)
+    else:
+        model = model(num_classes=len(df_train["user_class"].unique()), embedding_dim=embedding_dim)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
