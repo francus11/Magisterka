@@ -330,11 +330,16 @@ def train_siamese(
     model.train()
     
     for epoch in range(start_epoch, max_epochs):
-        epoch_start_time = time.time()
+        train_epoch_start_time = time.time()
         
         running_loss = 0.0
-        correct = 0
-        total = 0
+        train_correct = 0
+        train_total = 0
+        
+        train_true_positive = 0
+        train_true_negative = 0
+        train_false_positive = 0
+        train_false_negative = 0
         
         for batch_idx, (img1, img2, labels) in enumerate(train_loader):
             optimizer.zero_grad()
@@ -356,20 +361,30 @@ def train_siamese(
                 predictions = (distances >= threshold).float()
                 
                 # Zliczanie poprawnych trafień
-                correct += (predictions == labels).sum().item()
-                total += labels.size(0)
+                train_correct += (predictions == labels).sum().item()
+                
+                train_true_positive += ((predictions == 1.0) & (labels == 1.0)).sum().item()
+                train_true_negative += ((predictions == 0.0) & (labels == 0.0)).sum().item()
+                train_false_positive += ((predictions == 1.0) & (labels == 0.0)).sum().item()
+                train_false_negative += ((predictions == 0.0) & (labels == 1.0)).sum().item()
+                
+                train_total += labels.size(0)
             
-        epoch_loss = running_loss / samples_per_epoch
-        epoch_acc = (correct / total) * 100
+        train_epoch_loss = running_loss / samples_per_epoch
+        train_epoch_acc = (train_correct / train_total) * 100
         current_lr = optimizer.param_groups[0]["lr"]
         
-        epoch_time = time.time() - epoch_start_time
+        epoch_time = time.time() - train_epoch_start_time
         epoch_metrics = {
             "epoch": epoch + 1,
-            "loss": epoch_loss,
-            "accuracy": epoch_acc,
             "learning_rate": current_lr,
-            "time_seconds": epoch_time,
+            "train_loss": train_epoch_loss,
+            "train_accuracy": train_epoch_acc,
+            "train_time_seconds": epoch_time,
+            "train_true_positive": train_true_positive,
+            "train_true_negative": train_true_negative,
+            "train_false_positive": train_false_positive,
+            "train_false_negative": train_false_negative,
         }
         metrics_history.append(epoch_metrics)
 
@@ -401,7 +416,7 @@ def train_siamese(
             metrics_history,
         )
 
-        print(f"Epoka [{epoch+1}/{max_epochs}] | Straty (Loss): {epoch_loss:.4f} | LR: {current_lr:.6f} | Dokładność (Acc): {epoch_acc:.2f}% | Czas: {epoch_time:.2f}s")
+        print(f"Epoka [{epoch+1}/{max_epochs}] | Straty (Loss): {train_epoch_loss:.4f} | LR: {current_lr:.6f} | Dokładność (Acc): {train_epoch_acc:.2f}% | Czas: {epoch_time:.2f}s")
         
     #endregion
         
