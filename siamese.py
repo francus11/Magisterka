@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 
 
+from pre_trained_models import ResNetEncoder
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -413,6 +414,35 @@ def train_siamese(
 
     print("--- ZAKOŃCZONO UCZENIE SIAMESE ---")
     return model.encoder
+
+def test_siamese(model, df_test, threshold=0.5):
+    model.eval()
+    test_dataset = CachedSiameseDataset(df_test, samples_per_epoch=len(df_test))
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=8,
+        shuffle=False,
+        collate_fn=collate_fn_siamese_pad,
+    )
+
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for img1, img2, labels in test_loader:
+            emb1, emb2 = model(img1, img2)
+            distances = F.pairwise_distance(emb1, emb2)
+            predictions = (distances >= threshold).float()
+            correct += (predictions == labels).sum().item()
+            total += labels.size(0)
+
+    accuracy = (correct / total) * 100
+    print(f"Dokładność na zbiorze testowym: {accuracy:.2f}%")
+    return accuracy
     
 if __name__ == "__main__":
     train_siamese()
+    # test_model = SiameseNetwork(ResNetEncoder(embedding_dim=128, pretrained=True))
+    # test_model.encoder.load_state_dict(torch.load("crnn_siamese.pth"))
+    # df_words = pd.read_parquet("df_words_another_preprocessed.parquet").head(20000)
+    # test_siamese(test_model, df_words, threshold=0.5)
