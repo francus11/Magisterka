@@ -93,11 +93,18 @@ def load_and_preprocess_image(
 	)
 
 
-def build_word_dataframe(df, pics_path, preprocessed_pics_path):
+def build_word_dataframe(df, pics_path, preprocessed_pics_path, ext=".png"):
 	df_selected = df[["word_id", "word_text", "user_class", "word_bboxes"]].copy()
 	df_selected = df_selected.explode(["word_id", "word_text", "word_bboxes"], ignore_index=True)
-	df_selected["original_word_path"] = pics_path + "/" + df_selected["word_id"].astype(str) + ".png"
-	df_selected["word_path"] = preprocessed_pics_path + "/" + df_selected["word_id"].astype(str) + ".png"
+	
+	def add_extension(path, ext=".png"):
+		path = str(path)
+		if not os.path.splitext(path)[1]:
+			path += ext
+		return path
+	
+	df_selected["original_word_path"] = (pics_path + "/" + df_selected["word_id"].astype(str)).apply(add_extension, ext=ext)
+	df_selected["word_path"] = (preprocessed_pics_path + "/" + df_selected["word_id"].astype(str)).apply(add_extension, ext=ext)
 
 
 	def to_flat_bbox(x):
