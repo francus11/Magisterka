@@ -8,3 +8,4 @@ __pycache__
 *.tgz
 training_*
 *.pth
+/dataset_another*
