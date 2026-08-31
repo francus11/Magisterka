@@ -395,8 +395,9 @@ def train_crnn(
             generator,
         )
 
-        print(f"Epoka [{epoch+1}/{max_epochs}] | Straty (Loss): {train_epoch_loss:.4f} | Dokładność (Acc): {train_epoch_acc:.2f}% | Czas: {train_epoch_time:.2f}s")
-        
+        print(f"Epoka [{epoch+1}/{max_epochs}] TRAIN | Straty (Loss): {train_epoch_loss:.4f} | Dokładność (Acc): {train_epoch_acc:.2f}% | Czas: {train_epoch_time:.2f}s")
+        print(f"Epoka [{epoch+1}/{max_epochs}] VALIDATION | Straty (Loss): {val_epoch_loss:.4f} | Dokładność (Acc): {val_epoch_acc:.2f}% | Czas: {val_epoch_time:.2f}s")
+
     #endregion
         
     # =============================================
