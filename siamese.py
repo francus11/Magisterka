@@ -217,16 +217,12 @@ def train_siamese(
     class_to_idx = {cls: i for i, cls in enumerate(classes)}
     df_words["user_class"] = df_words["user_class"].map(class_to_idx)
     
-    df_train, df_val, df_test = common.get_subsets(df_words, test_size=0.2, val_size=0.20)
+    df_train, df_val, df_test = common.get_balanced_disjoint_subsets(df_words, test_size=0.2, val_size=0.20)
     
     train_dataset = CachedSiameseDataset(df_train, samples_per_epoch=samples_per_epoch)
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,                      # shuffle wymusza nowe seedy PyTorcha w każdej epoce
-        worker_init_fn=worker_init_fn,     # Rozwiązuje problem duplikacji
-        collate_fn=collate_fn_siamese_pad,
-    )
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, worker_init_fn=worker_init_fn, collate_fn=collate_fn_siamese_pad)
+    val_dataset = CachedSiameseDataset(df_val, samples_per_epoch=int(samples_per_epoch/5))
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, worker_init_fn=worker_init_fn, collate_fn=collate_fn_siamese_pad)
     #endregion
     
     # =============================================
@@ -330,9 +326,9 @@ def train_siamese(
     model.train()
     
     for epoch in range(start_epoch, max_epochs):
-        train_epoch_start_time = time.time()
+        # ===== training ===== 
         
-        running_loss = 0.0
+        train_running_loss = 0.0
         train_correct = 0
         train_total = 0
         
@@ -340,6 +336,9 @@ def train_siamese(
         train_true_negative = 0
         train_false_positive = 0
         train_false_negative = 0
+        
+        model.train()
+        train_epoch_start_time = time.time()
         
         for batch_idx, (img1, img2, labels) in enumerate(train_loader):
             optimizer.zero_grad()
@@ -350,7 +349,7 @@ def train_siamese(
             loss.backward()
             optimizer.step()
 
-            running_loss += loss.item() * img1.size(0)
+            train_running_loss += loss.item() * img1.size(0)
 
             # --- OBLICZANIE ACCURACY ---
             with torch.no_grad():
@@ -369,22 +368,65 @@ def train_siamese(
                 train_false_negative += ((predictions == 0.0) & (labels == 1.0)).sum().item()
                 
                 train_total += labels.size(0)
-            
-        train_epoch_loss = running_loss / samples_per_epoch
+        
+        train_epoch_time = time.time() - train_epoch_start_time
+        
+        train_epoch_loss = train_running_loss / samples_per_epoch
         train_epoch_acc = (train_correct / train_total) * 100
+        
+        # ===== validate ===== 
+        val_running_loss = 0.0
+        val_correct = 0
+        val_total = 0
+        
+        val_true_positive = 0
+        val_true_negative = 0
+        val_false_positive = 0
+        val_false_negative = 0
+        
+        model.eval()
+        val_epoch_start_time = time.time()
+        for batch_idx, (img1, img2, labels) in enumerate(val_loader):
+            with torch.no_grad():
+                emb1, emb2 = model(img1, img2)
+                loss = criterion(emb1, emb2, labels)
+                val_running_loss += loss.item() * img1.size(0)
+
+                distances = F.pairwise_distance(emb1, emb2)
+                predictions = (distances >= threshold).float()
+                
+                val_correct += (predictions == labels).sum().item()
+                val_true_positive += ((predictions == 1.0) & (labels == 1.0)).sum().item()
+                val_true_negative += ((predictions == 0.0) & (labels == 0.0)).sum().item()
+                val_false_positive += ((predictions == 1.0) & (labels == 0.0)).sum().item()
+                val_false_negative += ((predictions == 0.0) & (labels == 1.0)).sum().item()
+                
+                val_total += labels.size(0)
+            
+        val_epoch_loss = val_running_loss / samples_per_epoch
+        val_epoch_acc = (val_correct / val_total) * 100
         current_lr = optimizer.param_groups[0]["lr"]
         
-        epoch_time = time.time() - train_epoch_start_time
+        # ===== metrics ===== 
+        
+        val_epoch_time = time.time() - val_epoch_start_time
         epoch_metrics = {
             "epoch": epoch + 1,
             "learning_rate": current_lr,
             "train_loss": train_epoch_loss,
             "train_accuracy": train_epoch_acc,
-            "train_time_seconds": epoch_time,
+            "train_time_seconds": train_epoch_time,
             "train_true_positive": train_true_positive,
             "train_true_negative": train_true_negative,
             "train_false_positive": train_false_positive,
             "train_false_negative": train_false_negative,
+            "val_loss": val_epoch_loss,
+            "val_accuracy": val_epoch_acc,
+            "val_time_seconds": val_epoch_time,
+            "val_true_positive": val_true_positive,
+            "val_true_negative": val_true_negative,
+            "val_false_positive": val_false_positive,
+            "val_false_negative": val_false_negative,
         }
         metrics_history.append(epoch_metrics)
 
@@ -416,7 +458,7 @@ def train_siamese(
             metrics_history,
         )
 
-        print(f"Epoka [{epoch+1}/{max_epochs}] | Straty (Loss): {train_epoch_loss:.4f} | LR: {current_lr:.6f} | Dokładność (Acc): {train_epoch_acc:.2f}% | Czas: {epoch_time:.2f}s")
+        print(f"Epoka [{epoch+1}/{max_epochs}] | Straty (Loss): {train_epoch_loss:.4f} | LR: {current_lr:.6f} | Dokładność (Acc): {train_epoch_acc:.2f}% | Czas: {train_epoch_time:.2f}s")
         
     #endregion
         
