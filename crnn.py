@@ -101,7 +101,7 @@ class PretrainResnetClassifier_WithDropout(nn.Module):
         # Klasyfikator rzutujący embedding na liczność autorów
         self.classifier = nn.Sequential(
             nn.Dropout(p=dropout_p),            # <-- DROPOUT 1
-            nn.Linear(512, embedding_dim),
+            nn.Linear(embedding_dim, embedding_dim),
             nn.BatchNorm1d(embedding_dim),
             nn.ReLU(),
             nn.Dropout(p=dropout_p),            # <-- DROPOUT 2
