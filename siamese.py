@@ -207,6 +207,17 @@ def train_siamese(
     pretrained_encoder = None
     ):
     # =============================================
+    # Przygotowanie zmiennych dla session_settings
+    # =============================================
+    # Te zmienne będą używane do inicjalizacji session_settings
+    initial_max_epochs = max_epochs
+    initial_samples_per_epoch = samples_per_epoch
+    initial_batch_size = batch_size
+    initial_learning_rate = learning_rate
+    initial_margin = margin
+    initial_threshold = threshold
+    
+    # =============================================
     # Load and preprocess the dataset
     # =============================================
     #region
@@ -279,6 +290,8 @@ def train_siamese(
             "pretrained_path": "crnn_encoder_pretrained_70percent.pth",
             "weight_decay": 1e-4,
             "created_at": datetime.now().isoformat(timespec="seconds"),
+            "enable_parameter_override": False,
+            "parameter_overrides": {},
         }
     else:
         if settings_path.exists():
@@ -300,6 +313,58 @@ def train_siamese(
         if not latest_checkpoint.exists():
             raise FileNotFoundError(f"Nie znaleziono checkpointu: {latest_checkpoint}")
 
+        # Sprawdzenie czy należy nadpisać parametry
+        if settings_path.exists():
+            with settings_path.open("r", encoding="utf-8") as file:
+                session_settings = json.load(file)
+            
+            if session_settings.get("enable_parameter_override", False):
+                overrides = session_settings.get("parameter_overrides", {})
+                if overrides:
+                    print("\n=== NADPISYWANIE PARAMETRÓW ===")
+                    batch_size_changed = False
+                    samples_per_epoch_changed = False
+                    
+                    if "max_epochs" in overrides:
+                        old_val = max_epochs
+                        max_epochs = overrides["max_epochs"]
+                        print(f"max_epochs: {old_val} -> {max_epochs}")
+                    if "samples_per_epoch" in overrides:
+                        old_val = samples_per_epoch
+                        samples_per_epoch = overrides["samples_per_epoch"]
+                        samples_per_epoch_changed = True
+                        print(f"samples_per_epoch: {old_val} -> {samples_per_epoch}")
+                    if "batch_size" in overrides:
+                        old_val = batch_size
+                        batch_size = overrides["batch_size"]
+                        batch_size_changed = True
+                        print(f"batch_size: {old_val} -> {batch_size}")
+                    if "learning_rate" in overrides:
+                        old_val = learning_rate
+                        learning_rate = overrides["learning_rate"]
+                        print(f"learning_rate: {old_val} -> {learning_rate}")
+                        # Zaktualizuj optimizer
+                        for param_group in optimizer.param_groups:
+                            param_group['lr'] = learning_rate
+                    if "margin" in overrides:
+                        old_val = margin
+                        margin = overrides["margin"]
+                        print(f"margin: {old_val} -> {margin}")
+                    if "threshold" in overrides:
+                        old_val = threshold
+                        threshold = overrides["threshold"]
+                        print(f"threshold: {old_val} -> {threshold}")
+                    print("==========================\n")
+                    
+                    # Jeśli samples_per_epoch lub batch_size się zmieniły, stwórz nowe datasety i dataloadery
+                    if samples_per_epoch_changed or batch_size_changed:
+                        print("Rekonstrukcja datasetów i dataloaderów...")
+                        train_dataset = CachedSiameseDataset(df_train, samples_per_epoch=samples_per_epoch)
+                        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, worker_init_fn=worker_init_fn, collate_fn=collate_fn_siamese_pad)
+                        val_dataset = CachedSiameseDataset(df_val, samples_per_epoch=int(samples_per_epoch/5))
+                        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, worker_init_fn=worker_init_fn, collate_fn=collate_fn_siamese_pad)
+                        print("Datasety i dataloadery zostały zaktualizowane.\n")
+
         start_epoch, checkpoint_max_epochs, metrics_history = load_checkpoint(
             latest_checkpoint,
             model,
@@ -319,8 +384,9 @@ def train_siamese(
     # =============================================
     #region
     
-    start_epoch = 0
-    metrics_history = []
+    if resume_dir is None:
+        start_epoch = 0
+        metrics_history = []
     
     print("--- ROZPOCZĘCIE ETAPU UCZENIA SIAMESE ---")
     model.train()

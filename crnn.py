@@ -221,6 +221,7 @@ def train_pretrain(
     batch_size = 8,
     max_epochs = 10,
     learning_rate = 1e-3,
+    dropout_p = 0.0,
     resume_dir = None,
     model = None
 ):
@@ -293,18 +294,70 @@ def train_pretrain(
             "embedding_dim": embedding_dim,
             "batch_size": batch_size,
             "learning_rate": learning_rate,
+            "dropout_p": dropout_p,
             "dataset": type(train_dataset).__name__,
             "model": type(model).__name__,
             "encoder": type(model.encoder).__name__,
             "criterion": type(criterion).__name__,
             "optimizer": type(optimizer).__name__,
             "created_at": datetime.now().isoformat(timespec="seconds"),
+            "enable_parameter_override": False,
+            "parameter_overrides": {},
         }
         save_session_settings(settings_path, session_settings)
 
     if resume_dir is not None:
         if not latest_checkpoint.exists():
             raise FileNotFoundError(f"Nie znaleziono checkpointu: {latest_checkpoint}")
+
+        # Sprawdzenie czy należy nadpisać parametry
+        if settings_path.exists():
+            with settings_path.open("r", encoding="utf-8") as file:
+                session_settings = json.load(file)
+            
+            if session_settings.get("enable_parameter_override", False):
+                overrides = session_settings.get("parameter_overrides", {})
+                if overrides:
+                    print("\n=== NADPISYWANIE PARAMETRÓW ===")
+                    batch_size_changed = False
+                    
+                    if "max_epochs" in overrides:
+                        old_val = max_epochs
+                        max_epochs = overrides["max_epochs"]
+                        print(f"max_epochs: {old_val} -> {max_epochs}")
+                    if "embedding_dim" in overrides:
+                        old_val = embedding_dim
+                        embedding_dim = overrides["embedding_dim"]
+                        print(f"embedding_dim: {old_val} -> {embedding_dim}")
+                    if "batch_size" in overrides:
+                        old_val = batch_size
+                        batch_size = overrides["batch_size"]
+                        batch_size_changed = True
+                        print(f"batch_size: {old_val} -> {batch_size}")
+                    if "learning_rate" in overrides:
+                        old_val = learning_rate
+                        learning_rate = overrides["learning_rate"]
+                        print(f"learning_rate: {old_val} -> {learning_rate}")
+                        # Zaktualizuj optimizer
+                        for param_group in optimizer.param_groups:
+                            param_group['lr'] = learning_rate
+                    if "dropout_p" in overrides:
+                        old_val = dropout_p
+                        dropout_p = overrides["dropout_p"]
+                        print(f"dropout_p: {old_val} -> {dropout_p}")
+                        # Zaktualizuj dropout we wszystkich warstwach modelu
+                        for module in model.modules():
+                            if isinstance(module, nn.Dropout):
+                                module.p = dropout_p
+                    print("==========================\n")
+                    
+                    # Jeśli batch_size się zmienił, stwórz nowe dataloadery
+                    if batch_size_changed:
+                        print(f"Rekonstrukcja dataloaderów z nowym batch_size={batch_size}")
+                        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, generator=generator, collate_fn=collate_fn_pad)
+                        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, generator=generator, collate_fn=collate_fn_pad)
+                        test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, generator=generator, collate_fn=collate_fn_pad)
+                        print("Dataloadery zostały zaktualizowane.\n")
 
         start_epoch, checkpoint_max_epochs, metrics_history = load_checkpoint(
             latest_checkpoint,
@@ -323,8 +376,9 @@ def train_pretrain(
     # =============================================
     #region
 
-    start_epoch = 0
-    metrics_history = []
+    if resume_dir is None:
+        start_epoch = 0
+        metrics_history = []
     
     print("--- ROZPOCZĘCIE ETAPU PRE-TRAININGU ---")
     model.train()
