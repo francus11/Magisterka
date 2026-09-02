@@ -12,7 +12,7 @@ def siamese_training_ResNetEncoder():
 
 def classifier_training_ResNetEncoder_WithDropout():
     model = crnn.PretrainResnetClassifier_WithDropout
-    train_pretrain(max_epochs=30, batch_size=8, learning_rate=1e-3, model=model, resume_dir='training_crnn_PretrainResnetClassifier_WithDropout_ResNetEncoder_Adam_20260901_070459')
+    train_pretrain(dropout_p=0.5, max_epochs=30, batch_size=8, learning_rate=1e-3, model=model)
 
 def siamese_training_ResNetEncoder_WithDropout():
     pretrained_encoder = crnn.ResNetEncoder(embedding_dim=128, pretrained=True, dropout_p=0.5)
@@ -20,7 +20,9 @@ def siamese_training_ResNetEncoder_WithDropout():
     train_siamese(pretrained_encoder=pretrained_encoder, max_epochs=30, samples_per_epoch=20000, batch_size=8, learning_rate=1e-3, margin=1.0, threshold=0.5)
 
 if __name__ == "__main__":
-    siamese_training_ResNetEncoder_WithDropout()
+    classifier_training_ResNetEncoder_WithDropout()
+    
+    # siamese_training_ResNetEncoder_WithDropout()
     # Example usage of the imported modules
     # siamese_training_ResNetEncoder()
     # model = PretrainResnetClassifier
