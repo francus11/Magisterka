@@ -9,3 +9,4 @@ __pycache__
 training_*
 *.pth
 /dataset_another*
+/archive
