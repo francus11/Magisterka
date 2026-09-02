@@ -436,6 +436,7 @@ def train_pretrain(
         epoch_metrics = {
             "epoch": epoch + 1,
             "learning_rate": optimizer.param_groups[0]["lr"],
+            "dropout_p": model.encoder.backbone.fc[0].p if isinstance(model.encoder.backbone.fc, nn.Sequential) else 0.0,
             "train_loss": train_epoch_loss,
             "train_accuracy": train_epoch_acc,
             "train_time_seconds": train_epoch_time,
