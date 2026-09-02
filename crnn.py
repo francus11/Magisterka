@@ -267,10 +267,14 @@ def train_pretrain(
         # training_crnn_[model]_[encoder]_[optimizer]_[date]
         output_dir = Path(f"training_crnn_{type(model).__name__}_{type(model.encoder).__name__}_{type(optimizer).__name__}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
         output_dir.mkdir(parents=True, exist_ok=True)
+        
     else:
         output_dir = Path(resume_dir)
         if not output_dir.is_dir():
             raise FileNotFoundError(f"Nie znaleziono folderu: {output_dir}")
+
+    checkpoints_dir = output_dir / "checkpoints"
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
 
     latest_checkpoint = output_dir / "latest.pt"
     metrics_path = output_dir / "metrics.csv"
@@ -448,7 +452,7 @@ def train_pretrain(
 
         pd.DataFrame(metrics_history).to_csv(metrics_path, index=False)
         save_checkpoint(
-            output_dir / "checkpoints" / f"checkpoint_epoch_{epoch + 1:03d}.pt",
+            checkpoints_dir / f"checkpoint_epoch_{epoch + 1:03d}.pt",
             epoch + 1,
             max_epochs,
             model,

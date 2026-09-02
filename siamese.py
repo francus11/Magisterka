@@ -274,6 +274,9 @@ def train_siamese(
         output_dir = Path(resume_dir)
         if not output_dir.is_dir():
             raise FileNotFoundError(f"Nie znaleziono folderu: {output_dir}")
+
+    checkpoints_dir = output_dir / "checkpoints"
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
         
     latest_checkpoint = output_dir / "latest.pt"
     metrics_path = output_dir / "metrics.csv"
@@ -504,7 +507,7 @@ def train_siamese(
 
         # Osobny plik archiwalny dla każdej epoki.
         save_checkpoint(
-            output_dir / "checkpoints" / f"checkpoint_epoch_{epoch + 1:03d}.pt",
+            checkpoints_dir / f"checkpoint_epoch_{epoch + 1:03d}.pt",
             epoch + 1,
             max_epochs,
             model,
