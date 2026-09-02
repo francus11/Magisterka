@@ -504,7 +504,7 @@ def train_siamese(
 
         # Osobny plik archiwalny dla każdej epoki.
         save_checkpoint(
-            output_dir / f"checkpoint_epoch_{epoch + 1:03d}.pt",
+            output_dir / "checkpoints" / f"checkpoint_epoch_{epoch + 1:03d}.pt",
             epoch + 1,
             max_epochs,
             model,
