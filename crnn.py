@@ -97,16 +97,9 @@ class PretrainResnetClassifier_WithDropout(nn.Module):
     """Pełny model z nagłówkiem klasyfikacyjnym używany TYLKO do pre-trainingu."""
     def __init__(self, num_classes, embedding_dim=128, dropout_p=0.5):
         super(PretrainResnetClassifier_WithDropout, self).__init__()
-        self.encoder = ResNetEncoder(embedding_dim=embedding_dim)
+        self.encoder = ResNetEncoder(embedding_dim=embedding_dim, dropout_p=dropout_p)
         # Klasyfikator rzutujący embedding na liczność autorów
-        self.classifier = nn.Sequential(
-            nn.Dropout(p=dropout_p),            # <-- DROPOUT 1
-            nn.Linear(embedding_dim, embedding_dim),
-            nn.BatchNorm1d(embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout_p),            # <-- DROPOUT 2
-            nn.Linear(embedding_dim, num_classes)
-        )
+        self.classifier = nn.Linear(embedding_dim, num_classes)
 
     def forward(self, x):
         embedding = self.encoder(x)

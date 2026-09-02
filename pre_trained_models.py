@@ -5,7 +5,7 @@ from torchvision.models import resnet18
 class ResNetEncoder(nn.Module):
 	"""Enkoder ResNet zwracający wektor cech kompatybilny z SiameseNetwork."""
 
-	def __init__(self, embedding_dim=128, pretrained=False):
+	def __init__(self, embedding_dim=128, pretrained=False, dropout_p=0.0):
 		super().__init__()
 
 		backbone = resnet18(weights="DEFAULT" if pretrained else None)
@@ -23,7 +23,11 @@ class ResNetEncoder(nn.Module):
 		if pretrained:
 			backbone.conv1.weight.data.copy_(first_layer.weight.data.mean(dim=1, keepdim=True))
 
-		backbone.fc = nn.Linear(backbone.fc.in_features, embedding_dim)
+		in_features = backbone.fc.in_features  # 512 dla ResNet-18
+		backbone.fc = nn.Sequential(
+			nn.Dropout(p=dropout_p),
+			nn.Linear(in_features, embedding_dim)
+		)
 		self.backbone = backbone
 
 	def forward(self, x):
