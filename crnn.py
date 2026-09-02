@@ -314,6 +314,12 @@ def train_pretrain(
         if settings_path.exists():
             with settings_path.open("r", encoding="utf-8") as file:
                 session_settings = json.load(file)
+            start_epoch, checkpoint_max_epochs, metrics_history = load_checkpoint(
+                latest_checkpoint,
+                model,
+                optimizer,
+                generator,
+            )
             
             if session_settings.get("enable_parameter_override", False):
                 overrides = session_settings.get("parameter_overrides", {})
@@ -359,12 +365,7 @@ def train_pretrain(
                         test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, generator=generator, collate_fn=collate_fn_pad)
                         print("Dataloadery zostały zaktualizowane.\n")
 
-        start_epoch, checkpoint_max_epochs, metrics_history = load_checkpoint(
-            latest_checkpoint,
-            model,
-            optimizer,
-            generator,
-        )
+        
         if not settings_path.exists() and checkpoint_max_epochs is not None:
             max_epochs = checkpoint_max_epochs
         print(f"Wznowiono pre-training od epoki {start_epoch + 1}.")
