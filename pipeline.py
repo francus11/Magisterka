@@ -19,8 +19,12 @@ def siamese_training_ResNetEncoder_WithDropout():
     pretrained_encoder.load_state_dict(torch.load("training_crnn_PretrainResnetClassifier_WithDropout_ResNetEncoder_Adam_20260901_070459/PretrainResnetClassifier_WithDropout_encoder_pretrained.pth"))
     train_siamese(pretrained_encoder=pretrained_encoder, max_epochs=30, samples_per_epoch=20000, batch_size=8, learning_rate=1e-3, margin=1.0, threshold=0.5)
 
+def classifier_training_CRNN():
+    model = crnn.PretrainCRNNClassifier
+    train_pretrain(max_epochs=30, batch_size=8, learning_rate=1e-3, model=model)
+
 if __name__ == "__main__":
-    classifier_training_ResNetEncoder_WithDropout()
+    classifier_training_CRNN()
     
     # siamese_training_ResNetEncoder_WithDropout()
     # Example usage of the imported modules
