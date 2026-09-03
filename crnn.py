@@ -436,11 +436,15 @@ def train_pretrain(
         
         val_epoch_time = time.time() - val_epoch_start_time
         
+        try:
+            dropout_value = model.encoder.backbone.fc[0].p if isinstance(model.encoder.backbone.fc, nn.Sequential) else 0.0
+        except AttributeError:
+            dropout_value = 0.0
         # ===== metrics =====
         epoch_metrics = {
             "epoch": epoch + 1,
             "learning_rate": optimizer.param_groups[0]["lr"],
-            "dropout_p": model.encoder.backbone.fc[0].p if isinstance(model.encoder.backbone.fc, nn.Sequential) else 0.0,
+            "dropout_p": dropout_value,
             "train_loss": train_epoch_loss,
             "train_accuracy": train_epoch_acc,
             "train_time_seconds": train_epoch_time,
