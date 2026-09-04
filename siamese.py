@@ -201,9 +201,11 @@ def train_siamese(
     max_epochs = 10,
     samples_per_epoch = 20000,
     batch_size = 8,
+    dropout_p = 0.0,
     learning_rate = 1e-3,
     margin = 1.0,
     threshold = 0.5,
+    weight_decay = 0.0,
     pretrained_encoder = None
     ):
     # =============================================
@@ -255,7 +257,7 @@ def train_siamese(
     model = SiameseNetwork(pretrained_model)
     
     criterion = ContrastiveLoss(margin=margin)
-    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_epochs)
     
     #endregion
@@ -357,6 +359,13 @@ def train_siamese(
                         old_val = threshold
                         threshold = overrides["threshold"]
                         print(f"threshold: {old_val} -> {threshold}")
+                    if "weight_decay" in overrides:
+                        old_val = weight_decay
+                        weight_decay = overrides["weight_decay"]
+                        print(f"weight_decay: {old_val} -> {weight_decay}")
+                        # Zaktualizuj optimizer
+                        for param_group in optimizer.param_groups:
+                            param_group['weight_decay'] = weight_decay
                     print("==========================\n")
                     
                     # Jeśli samples_per_epoch lub batch_size się zmieniły, stwórz nowe datasety i dataloadery
@@ -482,6 +491,8 @@ def train_siamese(
         epoch_metrics = {
             "epoch": epoch + 1,
             "learning_rate": current_lr,
+            "dropout_p": session_settings.get("dropout_p", 0.0),
+            "weight_decay": weight_decay,
             "train_loss": train_epoch_loss,
             "train_accuracy": train_epoch_acc,
             "train_time_seconds": train_epoch_time,
