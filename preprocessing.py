@@ -20,8 +20,9 @@ def preprocess_handwriting_image(
 	threshold_block_size=31,
 	threshold_c=11,
 	adaptive_method=cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-	threshold_type=cv2.THRESH_BINARY_INV,
+	threshold_type=cv2.THRESH_BINARY,
 	resize_interpolation=cv2.INTER_AREA,
+	invert_colors=True
 ):
 	if image is None:
 		return None
@@ -48,15 +49,18 @@ def preprocess_handwriting_image(
 	if blur_kernel_size > 1:
 		img = cv2.GaussianBlur(img, (blur_kernel_size, blur_kernel_size), 0)
 
-	threshold_block_size = _normalize_odd_kernel_size(threshold_block_size, minimum=3)
-	img = cv2.adaptiveThreshold(
-		img,
-		255,
-		adaptive_method,
-		threshold_type,
-		threshold_block_size,
-		threshold_c,
-	)
+	if threshold_block_size is not None and threshold_c is not None and adaptive_method is not None and threshold_type is not None:
+		threshold_block_size = _normalize_odd_kernel_size(threshold_block_size, minimum=3)
+		img = cv2.adaptiveThreshold(
+			img,
+			255,
+			adaptive_method,
+			threshold_type,
+			threshold_block_size,
+			threshold_c,
+		)
+	if invert_colors:
+		img = 255 - img
 	return img.astype(np.float32) / 255.0
 
 
@@ -155,29 +159,38 @@ def export_preprocessed_images(df_selected, output_dir="preprocessed_words", **p
 		if out.ndim == 3 and out.shape[2] == 1:
 			out = out.squeeze(2)
 
-		original_filename = os.path.basename(df_selected.at[idx, "original_word_path"])
-		out_path = os.path.join(output_dir, original_filename)
+		out_path = df_selected.at[idx, "word_path"]
 		cv2.imwrite(out_path, out)
 
 	return preprocessed_images
 
 
-def main():
-	print("Starting preprocessing...")
+def preprocess_dataset(
+	dataframe,
+	original_pics_path="dataset_words/words",
+	preprocessed_pics_path="preprocessed_words",
+ 	new_dataframe_path="df_words_preprocessed.parquet"):
+	if not isinstance(dataframe, pd.DataFrame):
+		raise ValueError("The 'dataframe' argument must be a pandas DataFrame.")
 
-	df = pd.read_parquet("df.parquet")
-	df_selected = build_word_dataframe(df, pics_path="dataset_words/words", preprocessed_pics_path="preprocessed_words")
+	print("Starting preprocessing...")
+	df_selected = build_word_dataframe(dataframe, pics_path=original_pics_path, preprocessed_pics_path=preprocessed_pics_path)
 	df_selected = filter_records_existing_files(df_selected)
 	df_selected = filter_records_valid_height(df_selected, min_height=32)
 
-	preprocessed_images = export_preprocessed_images(df_selected, target_size=(0, 64))
+	preprocessed_images = export_preprocessed_images(df_selected, target_size=(0, 64), output_dir=preprocessed_pics_path, threshold_type=None)
 
-	df_selected.to_parquet("df_words_preprocessed.parquet", index=False)
+	df_selected.to_parquet(new_dataframe_path, index=False)
 
 	print("Preprocessing completed. Preprocessed images saved in 'preprocessed_words' directory.")
  
 
 if __name__ == "__main__":
-	main()
-
-
+	df = pd.read_parquet("df.parquet")
+	print(df)
+	preprocess_dataset(
+		dataframe=df, 
+  		original_pics_path="dataset_words/words", 
+    	preprocessed_pics_path="preprocessed_words_grayscale", 
+     	new_dataframe_path="df_words_preprocessed_grayscale.parquet"
+    )
