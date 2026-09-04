@@ -18,7 +18,7 @@ from pre_trained_models import ResNetEncoder
 
 class CRNNEncoder(nn.Module):
     """Główny trzon sieci wyciągający cechy (Backbone)."""
-    def __init__(self, embedding_dim=128):
+    def __init__(self, embedding_dim=128, dropout_p=0.0):
         super(CRNNEncoder, self).__init__()
         
         # Ekstrakcja cech z obrazu (CNN)
@@ -45,7 +45,8 @@ class CRNNEncoder(nn.Module):
             hidden_size=64, 
             num_layers=2, 
             bidirectional=True, 
-            batch_first=True
+            batch_first=True,
+            dropout=dropout_p
         )
         
         # Końcowy wektor cech (embedding)
@@ -65,13 +66,19 @@ class CRNNEncoder(nn.Module):
         # Wektor wyjściowy stylistyki pisma
         output = self.fc_embedding(embedding)   # [Batch, embedding_dim]
         return output
+    
+    def get_dropout_value(self):
+        return self.lstm.dropout
+
+    def set_dropout_value(self, dropout_p):
+        self.lstm.dropout = dropout_p
 
 
 class PretrainCRNNClassifier(nn.Module):
     """Pełny model z nagłówkiem klasyfikacyjnym używany TYLKO do pre-trainingu."""
-    def __init__(self, num_classes, embedding_dim=128):
+    def __init__(self, num_classes, embedding_dim=128, dropout_p=0.0):
         super(PretrainCRNNClassifier, self).__init__()
-        self.encoder = CRNNEncoder(embedding_dim=embedding_dim)
+        self.encoder = CRNNEncoder(embedding_dim=embedding_dim, dropout_p=dropout_p)
         # Klasyfikator rzutujący embedding na liczność autorów
         self.classifier = nn.Linear(embedding_dim, num_classes)
 
@@ -215,6 +222,7 @@ def train_pretrain(
     max_epochs = 10,
     learning_rate = 1e-3,
     dropout_p = 0.0,
+    weight_decay = 0.0,
     resume_dir = None,
     model = None
 ):
@@ -253,7 +261,7 @@ def train_pretrain(
     else:
         model = model(num_classes=len(df_train["user_class"].unique()), embedding_dim=embedding_dim)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     
     #endregion
     
@@ -348,10 +356,14 @@ def train_pretrain(
                         old_val = dropout_p
                         dropout_p = overrides["dropout_p"]
                         print(f"dropout_p: {old_val} -> {dropout_p}")
-                        # Zaktualizuj dropout we wszystkich warstwach modelu
-                        for module in model.modules():
-                            if isinstance(module, nn.Dropout):
-                                module.p = dropout_p
+                        model.encoder.set_dropout_value(dropout_p)
+                    if "weight_decay" in overrides:
+                        old_val = weight_decay
+                        weight_decay = overrides["weight_decay"]
+                        print(f"weight_decay: {old_val} -> {weight_decay}")
+                        # Zaktualizuj optimizer
+                        for param_group in optimizer.param_groups:
+                            param_group['weight_decay'] = weight_decay
                     print("==========================\n")
                     
                     # Jeśli batch_size się zmienił, stwórz nowe dataloadery
@@ -437,13 +449,14 @@ def train_pretrain(
         val_epoch_time = time.time() - val_epoch_start_time
         
         try:
-            dropout_value = model.encoder.backbone.fc[0].p if isinstance(model.encoder.backbone.fc, nn.Sequential) else 0.0
+            dropout_value = model.encoder.get_dropout_value()
         except AttributeError:
             dropout_value = 0.0
         # ===== metrics =====
         epoch_metrics = {
             "epoch": epoch + 1,
             "learning_rate": optimizer.param_groups[0]["lr"],
+            "weight_decay": optimizer.param_groups[0]["weight_decay"],
             "dropout_p": dropout_value,
             "train_loss": train_epoch_loss,
             "train_accuracy": train_epoch_acc,
