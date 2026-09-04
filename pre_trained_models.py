@@ -32,3 +32,9 @@ class ResNetEncoder(nn.Module):
 
 	def forward(self, x):
 		return self.backbone(x)
+
+	def get_dropout_value(self):
+		return self.backbone.fc[0].p
+
+	def set_dropout_value(self, dropout_p):
+		self.backbone.fc[0].p = dropout_p

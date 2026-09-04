@@ -66,6 +66,12 @@ class CRNNEncoder(nn.Module):
         # Wektor wyjściowy stylistyki pisma
         output = self.fc_embedding(embedding)   # [Batch, embedding_dim]
         return output
+    
+    def get_dropout_value(self):
+        return self.lstm.dropout
+
+    def set_dropout_value(self, dropout_p):
+        self.lstm.dropout = dropout_p
 
 
 class PretrainCRNNClassifier(nn.Module):
@@ -350,10 +356,7 @@ def train_pretrain(
                         old_val = dropout_p
                         dropout_p = overrides["dropout_p"]
                         print(f"dropout_p: {old_val} -> {dropout_p}")
-                        # Zaktualizuj dropout we wszystkich warstwach modelu
-                        for module in model.modules():
-                            if isinstance(module, nn.Dropout):
-                                module.p = dropout_p
+                        model.encoder.set_dropout_value(dropout_p)
                     if "weight_decay" in overrides:
                         old_val = weight_decay
                         weight_decay = overrides["weight_decay"]
@@ -446,7 +449,7 @@ def train_pretrain(
         val_epoch_time = time.time() - val_epoch_start_time
         
         try:
-            dropout_value = model.encoder.backbone.fc[0].p if isinstance(model.encoder.backbone.fc, nn.Sequential) else 0.0
+            dropout_value = model.encoder.get_dropout_value()
         except AttributeError:
             dropout_value = 0.0
         # ===== metrics =====

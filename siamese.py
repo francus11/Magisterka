@@ -254,6 +254,8 @@ def train_siamese(
             pretrained_model.load_state_dict(torch.load(pretrained_path))
             print(f"Wczytano wagi enkodera z {pretrained_path}")
     
+    pretrained_model.set_dropout_value(dropout_p)
+    
     model = SiameseNetwork(pretrained_model)
     
     criterion = ContrastiveLoss(margin=margin)
@@ -366,6 +368,11 @@ def train_siamese(
                         # Zaktualizuj optimizer
                         for param_group in optimizer.param_groups:
                             param_group['weight_decay'] = weight_decay
+                    if "dropout_p" in overrides:
+                        old_val = dropout_p
+                        dropout_p = overrides["dropout_p"]
+                        print(f"dropout_p: {old_val} -> {dropout_p}")
+                        model.encoder.set_dropout_value(dropout_p)
                     print("==========================\n")
                     
                     # Jeśli samples_per_epoch lub batch_size się zmieniły, stwórz nowe datasety i dataloadery
@@ -491,8 +498,8 @@ def train_siamese(
         epoch_metrics = {
             "epoch": epoch + 1,
             "learning_rate": current_lr,
-            "dropout_p": session_settings.get("dropout_p", 0.0),
-            "weight_decay": weight_decay,
+            "dropout_p": model.encoder.get_dropout_value(),
+            "weight_decay": optimizer.param_groups[0]["weight_decay"],
             "train_loss": train_epoch_loss,
             "train_accuracy": train_epoch_acc,
             "train_time_seconds": train_epoch_time,
