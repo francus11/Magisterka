@@ -257,9 +257,9 @@ def train_pretrain(
     
     # Inicjalizacja modelu, funkcji straty i optymalizatora
     if model is None:
-        model = PretrainResnetClassifier(num_classes=len(df_train["user_class"].unique()), embedding_dim=embedding_dim)
+        model = PretrainResnetClassifier(num_classes=len(df_train["user_class"].unique()), embedding_dim=embedding_dim, dropout_p=dropout_p)
     else:
-        model = model(num_classes=len(df_train["user_class"].unique()), embedding_dim=embedding_dim)
+        model = model(num_classes=len(df_train["user_class"].unique()), embedding_dim=embedding_dim, dropout_p=dropout_p)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     
